@@ -1,0 +1,17 @@
+[
+  {
+    "question": "How many elements are in the periodic table?",
+    "correctAnswer": 118,
+    "category": "Science"
+  },
+  {
+    "question": "How many types of cheese are made in France?",
+    "correctAnswer": 1200,
+    "category": "Food"
+  },
+  {
+    "question": "How many stripes are on the American flag?",
+    "correctAnswer": 13,
+    "category": "History"
+  }
+]
