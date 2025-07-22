@@ -4,6 +4,8 @@
 //
 //  Created by Andrew Pitblado on 2025-07-14.
 //
+//  Added animations to question text on correct answer, including scale and color.
+//  Background color changes based on score threshold, with smooth animations for feedback.
 
 import SwiftUI
 import SwiftData
@@ -26,56 +28,100 @@ struct GameView: View {
     @State private var engine: CHHapticEngine?
     @State private var animateUp = false
     @State private var animateDown = false
+
+    @State private var showCorrectAnimation = false
+    @State private var bgColor: Color = .clear
     
+    @State private var userGuess: String = ""
+    @State private var isGuessingExact: Bool = false
+    
+    let levelColors: [Color] = [
+        .white.opacity(0.7),
+        .green,
+        .yellow,
+        .orange,
+        .red
+    ]
     var body: some View {
-        VStack(spacing: 20) {
-            if let fact = currentFact ?? previewFact {
-                Text(fact.question)
-                    .font(.largeTitle)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                
-                Text("🧠 \(displayedValue)")
-                    .font(.largeTitle)
-                    .bold()
-                Spacer()
-                
-                HStack(spacing: 40) {
-                    VStack{
-                        Text("Over")
-                            .font(.title2)
+        ZStack {
+            bgColor
+                .ignoresSafeArea()
+                .animation(.easeInOut, value: bgColor)
+            
+            VStack(spacing: 20) {
+                if let fact = currentFact ?? previewFact {
+                    Text(fact.question)
+                        .font(.largeTitle)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                        .scaleEffect(showCorrectAnimation ? 1.1 : 1.0)
+                        .foregroundColor(showCorrectAnimation ? .green : .primary)
+                        .animation(.spring(), value: showCorrectAnimation)
+
+                    if isGuessingExact {
+                        TextField("Enter your guess", text: $userGuess)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.largeTitle)
+                            .multilineTextAlignment(.center)
                             .padding()
-                        ArrowButton(direction: .up, animate: $animateUp) {
-                            animateUp = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { animateUp = false }
-                            checkAnswer(over: true)
+                        
+                        Button("Submit") {
+                            submitExactGuess()
+                        }
+                        .font(.title2.weight(.bold))
+                        .padding()
+                        .buttonStyle(.borderedProminent)
+                        .disabled(userGuess.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    } else {
+                        Text("🧠 \(displayedValue)")
+                            .font(.largeTitle)
+                            .bold()
+                        Spacer()
+                        
+                        HStack(spacing: 40) {
+                            VStack{
+                                Text("Over")
+                                    .font(.title2)
+                                    .padding()
+                                    .bold()
+                                
+                                ArrowButton(direction: .up, animate: $animateUp) {
+                                    animateUp = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { animateUp = false }
+                                    checkAnswer(over: true)
+                                }
+                            }
+                            VStack{
+                                Text("Under")
+                                    .font(.title2)
+                                    .padding()
+                                    .bold()
+                                
+                                ArrowButton(direction: .down, animate: $animateDown) {
+                                    animateDown = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { animateDown = false }
+                                    checkAnswer(over: false)
+                                }
+                            }
                         }
                     }
-                    VStack{
-                        Text("Under")
-                            .font(.title2)
-                            .padding()
-                        ArrowButton(direction: .down, animate: $animateDown) {
-                            animateDown = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { animateDown = false }
-                            checkAnswer(over: false)
-                        }
-                    }
+                    
+                } else {
+                    Text("Loading...")
                 }
                 
-            } else {
-                Text("Loading...")
-            }
-            
-            Text("Score: \(score) • Streak: \(streak)")
-                .font(.title3)
-                .padding()
+                Text("Score: \(score) • Streak: \(streak)")
+                    .font(.title3)
+                    .padding()
+                    .fontWeight(.semibold)
 
-            Text("🏆 High Score: \(highScore)")
-                .font(.title3)
-                .foregroundStyle(.gray)
-                .padding()
-            Spacer()
+                Text("🏆 High Score: \(highScore)")
+                    .font(.title3)
+                    .foregroundStyle(.gray)
+                    .padding()
+                Spacer()
+            }
         }
         .onAppear {
             if previewFact == nil {
@@ -84,14 +130,26 @@ struct GameView: View {
             prepareHaptics()
         }
     }
+    
+    func backgroundColor(for level: Int) -> Color{
+        let index = min(level / 10, levelColors.count - 1)
+        return levelColors[index]
+    }
 
     func loadNextFact() {
         if let fact = facts.randomElement() {
             currentFact = fact
-            let baseMargin = 40 // Start margin
-            let margin = max(1, Int(Double(baseMargin) * pow(0.9, Double(level))))
-            let offset = Int.random(in: -margin...margin)
-            displayedValue = fact.correctAnswer + offset
+            isGuessingExact = (level > 1 && level % 10 == 0)
+            userGuess = ""
+            if isGuessingExact {
+                // In guess-exact mode, no offset; user must guess exact correctAnswer
+                displayedValue = 0
+            } else {
+                let baseMargin = 40 // Start margin
+                let margin = max(1, Int(Double(baseMargin) * pow(0.9, Double(level))))
+                let offset = Int.random(in: -margin...margin)
+                displayedValue = fact.correctAnswer + offset
+            }
         }
     }
 
@@ -100,6 +158,9 @@ struct GameView: View {
         let isActuallyOver = displayedValue < fact.correctAnswer
         
         if isActuallyOver == over {
+            showCorrectAnimation = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showCorrectAnimation = false }
+            
             score += 1
             streak += 1
             level += 1
@@ -112,26 +173,81 @@ struct GameView: View {
             }
             
             playSuccessHaptic()
-
+            
+            bgColor = backgroundColor(for: level)
+            
             // Badge unlock logic will go here 👇
             if streak == 5 {
                 unlockBadge(name: "Hot Streak")
             }
-
+            
             func unlockBadge(name: String) {
                 guard let badge = badges.first(where: { $0.name == name && !$0.isUnlocked }) else { return }
                 badge.isUnlocked = true
                 badge.unlockDate = Date()
                 try? context.save() // Optional in SwiftData but safe here
             }
+            
+            loadNextFact()
         } else {
             playErrorHaptic()
             score = 0
             streak = 0
             level = 1
+            bgColor = .blue
+            showCorrectAnimation = false
+            isGuessingExact = false
+            loadNextFact()
         }
+    }
+    
+    func submitExactGuess() {
+        guard let fact = currentFact else { return }
+        guard let guessInt = Int(userGuess.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
         
-        loadNextFact()
+        if guessInt == fact.correctAnswer {
+            showCorrectAnimation = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showCorrectAnimation = false }
+            
+            score += 1
+            streak += 1
+            level += 1
+            
+            if score > highScore {
+                highScore = score
+            }
+            if streak > bestStreak {
+                bestStreak = streak
+            }
+            
+            playSuccessHaptic()
+            
+            bgColor = backgroundColor(for: level)
+            
+            // Badge unlock logic will go here 👇
+            if streak == 5 {
+                unlockBadge(name: "Hot Streak")
+            }
+            
+            func unlockBadge(name: String) {
+                guard let badge = badges.first(where: { $0.name == name && !$0.isUnlocked }) else { return }
+                badge.isUnlocked = true
+                badge.unlockDate = Date()
+                try? context.save() // Optional in SwiftData but safe here
+            }
+            
+            isGuessingExact = false
+            loadNextFact()
+        } else {
+            playErrorHaptic()
+            score = 0
+            streak = 0
+            level = 1
+            bgColor = .blue
+            showCorrectAnimation = false
+            isGuessingExact = false
+            loadNextFact()
+        }
     }
     
     func prepareHaptics() {
@@ -173,7 +289,8 @@ struct ArrowButton: View {
     var body: some View {
         let arrow = direction == .up ? "⬆️" : "⬇️"
         Text(arrow)
-            .font(.system(size: 110))
+            .foregroundStyle(.primary)
+            .font(.system(size: 150))
             .offset(y: offsetY)
             .animation(.spring(), value: offsetY)
             .gesture(
