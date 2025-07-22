@@ -35,6 +35,10 @@ struct GameView: View {
     @State private var userGuess: String = ""
     @State private var isGuessingExact: Bool = false
     
+    @State private var showingMenu: Bool = true
+    @State private var showTutorial: Bool = false // For future use
+    @State private var showSettings: Bool = false // For future use
+    
     let levelColors: [Color] = [
         .white.opacity(0.7),
         .green,
@@ -43,94 +47,122 @@ struct GameView: View {
         .red
     ]
     var body: some View {
-        ZStack {
-            bgColor
-                .ignoresSafeArea()
-                .animation(.easeInOut, value: bgColor)
-            
-            VStack(spacing: 20) {
-                if let fact = currentFact ?? previewFact {
-                    Text(fact.question)
-                        .font(.largeTitle)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                        .scaleEffect(showCorrectAnimation ? 1.1 : 1.0)
-                        .foregroundColor(showCorrectAnimation ? .green : .primary)
-                        .animation(.spring(), value: showCorrectAnimation)
-
-                    if isGuessingExact {
-                        TextField("Enter your guess", text: $userGuess)
-                            .keyboardType(.numberPad)
-                            .textFieldStyle(.roundedBorder)
+        if showingMenu {
+            GameMenuView(
+                onStart: { showingMenu = false },
+                onShowTutorial: { showTutorial = true },
+                onShowSettings: { showSettings = true }
+            )
+            .sheet(isPresented: $showTutorial, content: {
+                TutorialView(showTutorial: $showTutorial)
+            })
+            .sheet(isPresented: $showSettings) {
+                SettingsView(showSettings: $showSettings)
+            }
+        } else {
+            ZStack {
+                bgColor
+                    .ignoresSafeArea()
+                    .animation(.easeInOut, value: bgColor)
+                
+                VStack(spacing: 20) {
+                    if let fact = currentFact ?? previewFact {
+                        Text(fact.question)
                             .font(.largeTitle)
                             .multilineTextAlignment(.center)
                             .padding()
-                        
-                        Button("Submit") {
-                            submitExactGuess()
+                            .scaleEffect(showCorrectAnimation ? 1.1 : 1.0)
+                            .foregroundColor(showCorrectAnimation ? .green : .primary)
+                            .animation(.spring(), value: showCorrectAnimation)
+
+                        if isGuessingExact {
+                            TextField("Enter your guess", text: $userGuess)
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.largeTitle)
+                                .multilineTextAlignment(.center)
+                                .padding()
+                            
+                            Button("Submit") {
+                                submitExactGuess()
+                            }
+                            .font(.title2.weight(.bold))
+                            .padding()
+                            .buttonStyle(.borderedProminent)
+                            .disabled(userGuess.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        } else {
+                            Text("🧠 \(displayedValue)")
+                                .font(.largeTitle)
+                                .bold()
+                            Spacer()
+                            
+                            HStack(spacing: 40) {
+                                VStack{
+                                    Text("Over")
+                                        .font(.title2)
+                                        .padding()
+                                        .bold()
+                                    
+                                    ArrowButton(direction: .up, animate: $animateUp) {
+                                        animateUp = true
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { animateUp = false }
+                                        checkAnswer(over: true)
+                                    }
+                                }
+                                VStack{
+                                    Text("Under")
+                                        .font(.title2)
+                                        .padding()
+                                        .bold()
+                                    
+                                    ArrowButton(direction: .down, animate: $animateDown) {
+                                        animateDown = true
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { animateDown = false }
+                                        checkAnswer(over: false)
+                                    }
+                                }
+                            }
                         }
-                        .font(.title2.weight(.bold))
-                        .padding()
-                        .buttonStyle(.borderedProminent)
-                        .disabled(userGuess.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        
                     } else {
-                        Text("🧠 \(displayedValue)")
-                            .font(.largeTitle)
-                            .bold()
-                        Spacer()
-                        
-                        HStack(spacing: 40) {
-                            VStack{
-                                Text("Over")
-                                    .font(.title2)
-                                    .padding()
-                                    .bold()
-                                
-                                ArrowButton(direction: .up, animate: $animateUp) {
-                                    animateUp = true
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { animateUp = false }
-                                    checkAnswer(over: true)
-                                }
-                            }
-                            VStack{
-                                Text("Under")
-                                    .font(.title2)
-                                    .padding()
-                                    .bold()
-                                
-                                ArrowButton(direction: .down, animate: $animateDown) {
-                                    animateDown = true
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { animateDown = false }
-                                    checkAnswer(over: false)
-                                }
-                            }
-                        }
+                        Text("Loading...")
                     }
                     
-                } else {
-                    Text("Loading...")
-                }
-                
-                Text("Score: \(score) • Streak: \(streak)")
-                    .font(.title3)
-                    .padding()
-                    .fontWeight(.semibold)
+                    Text("Score: \(score) • Streak: \(streak)")
+                        .font(.title3)
+                        .padding()
+                        .fontWeight(.semibold)
 
-                Text("🏆 High Score: \(highScore)")
-                    .font(.title3)
-                    .foregroundStyle(.gray)
-                    .padding()
-                Spacer()
+                    Text("🏆 High Score: \(highScore)")
+                        .font(.title3)
+                        .foregroundStyle(.gray)
+                        .padding()
+                    Spacer()
+                    
+                    Button("Return to Menu") {
+                        showingMenu = true
+                        // Reset game state if desired
+                        score = 0
+                        streak = 0
+                        level = 1
+                        bgColor = .clear
+                    }
+                    .font(.footnote)
+                    .padding(.top)
+                    .opacity(showingMenu ? 0 : 1)
+                }
+            }
+            .onAppear {
+                if previewFact == nil {
+                    loadNextFact()
+                }
+                prepareHaptics()
             }
         }
-        .onAppear {
-            if previewFact == nil {
-                loadNextFact()
-            }
-            prepareHaptics()
-        }
+        
     }
-    
+        
+
     func backgroundColor(for level: Int) -> Color{
         let index = min(level / 10, levelColors.count - 1)
         return levelColors[index]
